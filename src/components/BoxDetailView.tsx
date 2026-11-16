@@ -15,14 +15,11 @@ import {
   CheckCircle2, 
   Zap, 
   Share2, 
-  Download, 
-  Activity, 
-  RefreshCw, 
   Radio, 
-  SlidersHorizontal,
-  Flame,
   Check,
-  FileText
+  FileText,
+  Sliders,
+  ChevronDown
 } from 'lucide-react';
 
 interface BoxDetailViewProps {
@@ -39,20 +36,26 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
   onUpdateBox
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
-  const [simulationNote, setSimulationNote] = useState<string | null>(null);
+  const [showSimPanel, setShowSimPanel] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isTempSafe = box.internalTemp >= 2.0 && box.internalTemp <= 8.0;
 
-  // Copy tracking link to clipboard
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const handleCopyLink = () => {
     const url = window.location.origin + window.location.pathname + '#/box/' + box.id;
     navigator.clipboard.writeText(url).then(() => {
       setCopiedLink(true);
+      showToast('Tracking URL copied to clipboard');
       setTimeout(() => setCopiedLink(false), 2500);
     });
   };
 
-  // Simulation: Trigger Heatwave (+7°C Ambient)
+  // Field Simulation Actions
   const handleSimulateHeatwave = () => {
     const newAmbient = Number((box.ambientTemp + 7.5).toFixed(1));
     const newInternal = Number((box.internalTemp + 0.9).toFixed(1));
@@ -68,30 +71,18 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
           id: `LOG-HEAT-${Date.now()}`,
           timestamp: 'Just now',
           type: 'SENSOR',
-          title: 'Simulated Ambient Heatwave Surge',
-          description: `External temperature spiked to ${newAmbient}°C. Peltier cooling shifted to boost mode (22.4W) to protect vaccine cargo.`,
-          operator: 'Simulator Engine',
+          title: 'Ambient Temperature Surge',
+          description: `External temperature increased to ${newAmbient}°C. Peltier shifted to 22.4W boost mode.`,
+          operator: 'Telemetry Gateway',
           location: box.currentLocation.locationName
         },
         ...box.auditLogs
-      ],
-      telemetryHistory: [
-        ...box.telemetryHistory,
-        {
-          time: 'Now',
-          internalTemp: newInternal,
-          ambientTemp: newAmbient,
-          peltierActive: true,
-          batteryPct: box.batteryPct - 1
-        }
       ]
     };
     onUpdateBox(updated);
-    setSimulationNote(`Ambient heatwave simulated (+7.5°C). Peltier cooling boosted to 22.4W!`);
-    setTimeout(() => setSimulationNote(null), 4000);
+    showToast(`Ambient spiked to ${newAmbient}°C. Peltier boost activated.`);
   };
 
-  // Simulation: Simulate Lid Opening / Tamper
   const handleSimulateLidTamper = () => {
     const isNowOpened = box.lidStatus === 'SEALED';
     const updated: ColdChainBox = {
@@ -104,27 +95,24 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
           id: `LOG-LID-${Date.now()}`,
           timestamp: 'Just now',
           type: isNowOpened ? 'ALERT' : 'VERIFICATION',
-          title: isNowOpened ? 'Hall-Effect Sensor Alert: Lid Seal Breached' : 'Lid Magnetic Lock Re-Sealed & Verified',
+          title: isNowOpened ? 'Hall Tamper Alert: Lid Opened' : 'Magnetic Lid Re-Sealed',
           description: isNowOpened 
-            ? 'Box latch opened outside authorized depot geofence. Temperature loss risk logged.'
-            : 'Box re-latched and magnetic lock confirmed secure.',
-          operator: 'Field Technician',
+            ? 'Box latch opened outside verified checkpoint geofence.'
+            : 'Box securely latched and verified.',
+          operator: 'Field Inspection',
           location: box.currentLocation.locationName
         },
         ...box.auditLogs
       ]
     };
     onUpdateBox(updated);
-    setSimulationNote(isNowOpened ? 'Lid breach alert triggered!' : 'Lid seal securely re-established.');
-    setTimeout(() => setSimulationNote(null), 4000);
+    showToast(isNowOpened ? 'Hall-effect tamper alert logged!' : 'Lid seal re-established.');
   };
 
-  // Simulation: Advance Next Checkpoint
   const handleAdvanceCheckpoint = () => {
     const upcomingIdx = box.checkpoints.findIndex(c => c.status === 'UPCOMING');
     if (upcomingIdx === -1) {
-      setSimulationNote('All route checkpoints have already been completed!');
-      setTimeout(() => setSimulationNote(null), 3000);
+      showToast('All checkpoints already completed.');
       return;
     }
 
@@ -134,12 +122,9 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
           ...cp,
           status: 'COMPLETED',
           timestamp: 'Just now',
-          operator: 'Checkpoint Scanning Officer',
-          notes: 'Handheld QR scan verified. Cold chain maintained.'
+          operator: 'Field Officer',
+          notes: 'Handheld QR optical verification successful.'
         };
-      }
-      if (idx === upcomingIdx - 1) {
-        return { ...cp, status: 'COMPLETED' };
       }
       return cp;
     });
@@ -159,9 +144,9 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
           id: `LOG-CP-${Date.now()}`,
           timestamp: 'Just now',
           type: 'SCAN',
-          title: `Checkpoint QR Scan: ${updatedCheckpoints[upcomingIdx].name}`,
-          description: `Box QR scanned and authenticated at checkpoint. Cold-chain audit intact.`,
-          operator: 'Officer On Duty',
+          title: `Checkpoint Scan: ${updatedCheckpoints[upcomingIdx].name}`,
+          description: `QR tag scanned at ${updatedCheckpoints[upcomingIdx].city}. Chain of custody verified.`,
+          operator: 'Checkpoint Specialist',
           location: updatedCheckpoints[upcomingIdx].city
         },
         ...box.auditLogs
@@ -169,11 +154,9 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
     };
 
     onUpdateBox(updated);
-    setSimulationNote(`Checkpoint "${updatedCheckpoints[upcomingIdx].name}" marked as SCANNED & COMPLETED!`);
-    setTimeout(() => setSimulationNote(null), 4000);
+    showToast(`Checkpoint "${updatedCheckpoints[upcomingIdx].name}" completed!`);
   };
 
-  // Reset to Ideal State
   const handleResetIdeal = () => {
     const updated: ColdChainBox = {
       ...box,
@@ -187,618 +170,407 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
       pcmPhase: 'SOLID'
     };
     onUpdateBox(updated);
-    setSimulationNote('Telemetry restored to standard optimal cooling state (3.4°C).');
-    setTimeout(() => setSimulationNote(null), 3500);
+    showToast('Reset to nominal baseline telemetry (3.4°C).');
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-4 sm:space-y-6 pb-24">
       
-      {/* Simulation Feedback Alert */}
-      {simulationNote && (
-        <div className="p-3.5 rounded-xl bg-cyan-950/90 border border-cyan-500/50 text-cyan-200 text-xs font-mono flex items-center justify-between shadow-lg animate-fade-in">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
-            <span>{simulationNote}</span>
-          </div>
-          <span className="text-[10px] text-cyan-400 uppercase font-bold">Live Updated</span>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-4 inset-x-4 max-w-sm mx-auto z-50 p-3 rounded-xl bg-slate-900 border border-teal-500/60 text-teal-200 text-xs font-mono flex items-center justify-between shadow-2xl animate-fade-in">
+          <span>{toastMessage}</span>
+          <span className="text-[10px] text-teal-400 font-bold uppercase">Sync</span>
         </div>
       )}
 
-      {/* Top Navigation & Action Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        
-        <div className="flex items-start sm:items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition cursor-pointer"
-            title="Back to Fleet Overview"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xl sm:text-2xl font-black text-cyan-400 tracking-wider">
-                {box.id}
-              </span>
-              <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                {box.category}
-              </span>
-              <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${
-                box.status === 'IN_TRANSIT'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                  : box.status === 'DELIVERED'
-                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                    : 'bg-red-950 text-red-300 border border-red-800 animate-pulse'
-              }`}>
-                {box.status.replace('_', ' ')}
-              </span>
-            </div>
-            <h1 className="text-base sm:text-lg font-bold text-white mt-1">
-              {box.name}
-            </h1>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Top Header & Navigation */}
+      <div className="flex flex-col gap-3 pt-1">
+        <div className="flex items-center justify-between gap-2">
           
           <button
-            onClick={() => onOpenQRLabel(box)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium transition cursor-pointer"
           >
-            <QrCode className="w-4 h-4 text-cyan-400" />
-            <span>Print Physical QR Sticker</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>All Boxes</span>
           </button>
 
-          <button
-            onClick={handleCopyLink}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
-          >
-            {copiedLink ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span className="text-emerald-400 font-mono">Link Copied!</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-4 h-4 text-slate-400" />
-                <span>Share QR Link</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => onOpenQRLabel(box)}
+              className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-medium transition cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5 text-teal-400" />
+              <span>QR Label</span>
+            </button>
 
-        </div>
-
-      </div>
-
-      {/* Live Simulation Controls Ribbon */}
-      <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 text-slate-400 font-mono">
-          <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
-          <span className="text-slate-300 font-bold uppercase tracking-wider">Demo / Simulation Toolbar:</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleSimulateHeatwave}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 text-xs font-medium transition cursor-pointer"
-          >
-            <Flame className="w-3.5 h-3.5 text-amber-400" />
-            <span>Simulate Heat Spike (+7°C)</span>
-          </button>
-
-          <button
-            onClick={handleSimulateLidTamper}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer border ${
-              box.lidStatus === 'SEALED'
-                ? 'bg-red-950/60 hover:bg-red-900/80 text-red-300 border-red-800/80'
-                : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-800/80'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>{box.lidStatus === 'SEALED' ? 'Simulate Lid Breach' : 'Seal Lid'}</span>
-          </button>
-
-          <button
-            onClick={handleAdvanceCheckpoint}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/80 text-xs font-medium transition cursor-pointer"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Scan Next Checkpoint</span>
-          </button>
-
-          <button
-            onClick={handleResetIdeal}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition cursor-pointer"
-            title="Reset to Ideal Cooling"
-          >
-            <RefreshCw className="w-3 h-3 text-slate-400" />
-            <span>Reset</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Telemetry & Sensor Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Chamber Temperature */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-2">
-            <span className="flex items-center gap-1.5">
-              <Thermometer className="w-4 h-4 text-cyan-400" />
-              CHAMBER CORE TEMP
-            </span>
-            <span className={`w-2 h-2 rounded-full ${isTempSafe ? 'bg-emerald-400' : 'bg-red-400 animate-ping'}`} />
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-medium transition cursor-pointer"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5 text-slate-400" />}
+            </button>
           </div>
 
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className={`text-4xl font-mono font-black tracking-tight ${
+        </div>
+
+        {/* Box Title Bar */}
+        <div className="panel p-3.5 sm:p-4 rounded-xl">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="font-mono text-base sm:text-lg font-bold text-teal-400 tracking-wide">
+              {box.id}
+            </span>
+            <span className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${
+              box.status === 'IN_TRANSIT'
+                ? 'bg-teal-950 text-teal-300 border border-teal-800'
+                : box.status === 'DELIVERED'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                  : 'bg-red-950 text-red-300 border border-red-800'
+            }`}>
+              {box.status.replace('_', ' ')}
+            </span>
+          </div>
+          <h1 className="text-sm sm:text-base font-bold text-white leading-snug">
+            {box.name}
+          </h1>
+          <span className="text-[11px] text-slate-400 font-mono block mt-0.5">
+            {box.category}
+          </span>
+        </div>
+      </div>
+
+      {/* Primary Telemetry Strip (2x2 on mobile, 4 columns on desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        
+        {/* Chamber Temp */}
+        <div className="panel p-3.5 sm:p-4 rounded-xl relative">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="flex items-center gap-1">
+              <Thermometer className="w-3.5 h-3.5 text-teal-400" />
+              CHAMBER
+            </span>
+            <span className={`w-2 h-2 rounded-full ${isTempSafe ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          </div>
+
+          <div className="flex items-baseline gap-1 my-1">
+            <span className={`text-2xl sm:text-3xl font-mono font-black ${
               isTempSafe ? 'text-emerald-400' : 'text-red-400'
             }`}>
               {box.internalTemp > 0 ? `+${box.internalTemp}` : box.internalTemp}°C
             </span>
-            <span className="text-xs font-mono text-slate-400">
-              Safe Zone: 2°C – 8°C
-            </span>
           </div>
 
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>Ambient Air: <b className="text-slate-200">{box.ambientTemp}°C</b></span>
-            <span className="text-cyan-400 font-mono font-semibold">
-              Δ {Number((box.ambientTemp - box.internalTemp).toFixed(1))}°C Diff
-            </span>
+          <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+            <span>Limit: 2–8°C</span>
+            <span>Amb: {box.ambientTemp}°C</span>
           </div>
         </div>
 
-        {/* Hybrid Cooling Engine (PCM + Peltier) */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-2">
-            <span className="flex items-center gap-1.5">
-              <Snowflake className="w-4 h-4 text-blue-400" />
-              HYBRID PCM–PELTIER
-            </span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-              {box.pcmPhase}
-            </span>
-          </div>
-
-          <div className="space-y-2 mb-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-mono font-bold text-white">{box.pcmLevel}% PCM Buffer</span>
-              <span className="text-xs font-mono text-cyan-400">
-                {box.peltierState === 'ACTIVE_COOLING' ? 'Boost ON' : box.peltierState === 'PULSE_MAINTAIN' ? 'Pulsing' : 'Standby'}
-              </span>
-            </div>
-            
-            {/* Progress bar of PCM */}
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full transition-all duration-500"
-                style={{ width: `${box.pcmLevel}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+        {/* PCM Buffer & Peltier */}
+        <div className="panel p-3.5 sm:p-4 rounded-xl">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
             <span className="flex items-center gap-1">
-              <Zap className="w-3 h-3 text-amber-400" />
-              Peltier Draw: {box.peltierWatts}W
+              <Snowflake className="w-3.5 h-3.5 text-sky-400" />
+              PCM BUFFER
             </span>
-            <span className="text-slate-500 font-mono">14.8V Solid State</span>
+            <span className="text-[10px] font-mono text-slate-400">{box.pcmPhase}</span>
+          </div>
+
+          <div className="flex items-baseline gap-1 my-1">
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
+              {box.pcmLevel}%
+            </span>
+          </div>
+
+          <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+            <span>Peltier: {box.peltierState === 'ACTIVE_COOLING' ? 'Boost' : box.peltierState === 'PULSE_MAINTAIN' ? 'Pulse' : 'Idle'}</span>
+            <span>{box.peltierWatts}W</span>
           </div>
         </div>
 
-        {/* Battery & Autonomy */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-2">
-            <span className="flex items-center gap-1.5">
-              <Battery className="w-4 h-4 text-teal-400" />
-              BATTERY & POWER
+        {/* Battery Autonomy */}
+        <div className="panel p-3.5 sm:p-4 rounded-xl">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="flex items-center gap-1">
+              <Battery className="w-3.5 h-3.5 text-slate-400" />
+              BATTERY
             </span>
-            <span className="text-[10px] font-mono text-emerald-400">LiFePO4 Safe</span>
+            <span className="text-[10px] font-mono text-teal-400">LiFePO4</span>
           </div>
 
-          <div className="space-y-2 mb-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-mono font-bold text-white">{box.batteryPct}%</span>
-              <span className="text-xs font-mono text-emerald-400">
-                ~{box.estimatedAutonomyHours}h Left
-              </span>
-            </div>
-            
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-500"
-                style={{ width: `${box.batteryPct}%` }}
-              />
-            </div>
+          <div className="flex items-baseline gap-1 my-1">
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
+              {box.batteryPct}%
+            </span>
+            <span className="text-[11px] text-teal-400 font-mono">
+              ~{box.estimatedAutonomyHours}h
+            </span>
           </div>
 
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>Cell Voltage: <b className="text-slate-200">{box.batteryVoltage}V</b></span>
-            <span className="text-slate-400 font-mono">Aux Solar Capable</span>
+          <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+            <span>Cell: {box.batteryVoltage}V</span>
+            <span>Autonomy OK</span>
           </div>
         </div>
 
-        {/* Physical Security & Sensors */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-2">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              PHYSICAL INTEGRITY
+        {/* Lid Lock & Security */}
+        <div className="panel p-3.5 sm:p-4 rounded-xl">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              TAMPER SEAL
             </span>
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-              box.lidStatus === 'SEALED' 
-                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
-                : 'bg-red-950 text-red-300 border border-red-800 animate-pulse'
+            <span className={`w-2 h-2 rounded-full ${box.lidStatus === 'SEALED' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          </div>
+
+          <div className="flex items-baseline gap-1 my-1">
+            <span className={`text-base sm:text-lg font-mono font-bold ${
+              box.lidStatus === 'SEALED' ? 'text-emerald-400' : 'text-red-400'
             }`}>
-              {box.lidStatus}
+              {box.lidStatus === 'SEALED' ? 'SECURE' : 'BREACH'}
             </span>
           </div>
 
-          <div className="space-y-1 mb-2">
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <span>Hall Tamper Lock:</span>
-              <span className={`font-mono font-bold ${box.lidStatus === 'SEALED' ? 'text-emerald-400' : 'text-red-400'}`}>
-                {box.lidStatus === 'SEALED' ? 'MAGNETIC SECURE' : 'BREACH DETECTED'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <span>Transport Tilt:</span>
-              <span className="font-mono text-slate-200">{box.tiltDegrees}° (Upright)</span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <span>Tri-Axial Shock:</span>
-              <span className="font-mono text-slate-200">{box.shockG}g (Smooth)</span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>Humidity: <b className="text-slate-200">{box.humidityPct}% RH</b></span>
-            <span className="text-cyan-400 font-mono">{box.connectivityType}</span>
+          <div className="text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+            <span>Tilt: {box.tiltDegrees}°</span>
+            <span>Shock: {box.shockG}g</span>
           </div>
         </div>
 
       </div>
 
-      {/* Route & GPS Timeline Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Route Stepper & Waypoints */}
-        <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
-                Logistics Waypoint Scans & Route
-              </h2>
-            </div>
-            <span className="text-xs font-mono text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800">
-              {box.destination.distanceRemainingKm > 0 
-                ? `${box.destination.distanceRemainingKm} km to Destination` 
-                : 'Arrived at Destination'}
-            </span>
-          </div>
+      {/* Discrete Field Testing Dropdown (Cleaner than AI Simulation Bar) */}
+      <div className="panel rounded-xl overflow-hidden text-xs">
+        <button
+          onClick={() => setShowSimPanel(!showSimPanel)}
+          className="w-full p-3 flex items-center justify-between text-slate-400 hover:text-slate-200 transition cursor-pointer"
+        >
+          <span className="flex items-center gap-2 font-mono text-[11px]">
+            <Sliders className="w-3.5 h-3.5 text-teal-400" />
+            Field Operator Diagnostic Controls
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showSimPanel ? 'rotate-180' : ''}`} />
+        </button>
 
-          {/* Carrier & Driver Info Strip */}
-          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-cyan-400">
-                <Truck className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] font-mono">CARRIER & VEHICLE</span>
-                <span className="font-semibold text-slate-200">{box.carrier.agency} ({box.carrier.vehicleNo})</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 text-slate-300">
-              <div>
-                <span className="text-slate-400 block text-[10px] font-mono">DRIVER</span>
-                <span className="font-medium">{box.carrier.driverName}</span>
-              </div>
-              <a
-                href={`tel:${box.carrier.phone}`}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-mono transition"
-              >
-                <Phone className="w-3 h-3" />
-                <span>Call Courier</span>
-              </a>
-            </div>
-          </div>
-
-          {/* Stepper Timeline */}
-          <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
-            {box.checkpoints.map((cp, idx) => {
-              const isCompleted = cp.status === 'COMPLETED';
-              const isCurrent = cp.status === 'CURRENT';
-
-              return (
-                <div key={cp.id} className="relative group">
-                  
-                  {/* Stepper Pin */}
-                  <div className={`absolute -left-6 top-1 w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all ${
-                    isCompleted
-                      ? 'bg-emerald-500 border-emerald-400 text-slate-950'
-                      : isCurrent
-                        ? 'bg-cyan-500 border-cyan-300 text-slate-950 shadow-md shadow-cyan-500/50'
-                        : 'bg-slate-900 border-slate-700 text-slate-500'
-                  }`}>
-                    {isCompleted ? (
-                      <Check className="w-3 h-3 stroke-[3]" />
-                    ) : (
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    )}
-                  </div>
-
-                  {/* Waypoint details */}
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold ${
-                          isCompleted || isCurrent ? 'text-slate-100' : 'text-slate-500'
-                        }`}>
-                          {cp.name}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                          {cp.city}
-                        </span>
-                      </div>
-                      
-                      {cp.timestamp && (
-                        <span className="text-[11px] font-mono text-cyan-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {cp.timestamp}
-                        </span>
-                      )}
-                    </div>
-
-                    {cp.operator && (
-                      <p className="text-[11px] text-slate-400">
-                        Scanned by: <span className="text-slate-300">{cp.operator}</span>
-                      </p>
-                    )}
-
-                    {cp.notes && (
-                      <p className="text-[11px] text-slate-400 italic">
-                        "{cp.notes}"
-                      </p>
-                    )}
-                  </div>
-
-                </div>
-              );
-            })}
-          </div>
-
-        </div>
-
-        {/* GPS Live Telemetry & Quick QR Tag Card */}
-        <div className="space-y-6">
-          
-          {/* Quick QR Card */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-800 text-center space-y-3">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider block">
-              Cryptographic Box QR Token
-            </span>
-
-            <div 
-              onClick={() => onOpenQRLabel(box)}
-              className="inline-block p-3 rounded-xl bg-white cursor-pointer hover:ring-4 hover:ring-cyan-500/40 transition shadow-lg"
-              title="Click to expand official QR Box Label"
-            >
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(box.qrPayload)}`}
-                alt="Box QR Code"
-                className="w-36 h-36 mx-auto"
-              />
-            </div>
-
-            <div className="text-xs">
-              <span className="font-mono font-bold text-cyan-400">{box.id}</span>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Scan with any smartphone camera to open this live dashboard instantly.
-              </p>
-            </div>
-
+        {showSimPanel && (
+          <div className="p-3 pt-0 border-t border-slate-800/80 flex flex-wrap gap-2 text-xs">
             <button
-              onClick={() => onOpenQRLabel(box)}
-              className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold border border-slate-700 transition"
+              onClick={handleSimulateHeatwave}
+              className="py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 font-mono text-[11px] transition"
             >
-              Expand Printable Sticker
+              Test Heat Spike (+7°C)
+            </button>
+            <button
+              onClick={handleSimulateLidTamper}
+              className="py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-red-300 font-mono text-[11px] transition"
+            >
+              Toggle Lid Sensor
+            </button>
+            <button
+              onClick={handleAdvanceCheckpoint}
+              className="py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-teal-300 font-mono text-[11px] transition"
+            >
+              Step Checkpoint Scan
+            </button>
+            <button
+              onClick={handleResetIdeal}
+              className="py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 font-mono text-[11px] transition"
+            >
+              Reset Nominal
             </button>
           </div>
-
-          {/* Current GPS coordinates */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-              <span>CURRENT GPS COORDINATES</span>
-              <span className="text-emerald-400 flex items-center gap-1">
-                <Radio className="w-3 h-3 animate-pulse" />
-                Live 4G
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Latitude:</span>
-                <span className="text-cyan-400 font-bold">{box.currentLocation.latitude.toFixed(4)}° N</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Longitude:</span>
-                <span className="text-cyan-400 font-bold">{box.currentLocation.longitude.toFixed(4)}° E</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Speed:</span>
-                <span className="text-slate-200">{box.currentLocation.speedKmH} km/h</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Altitude:</span>
-                <span className="text-slate-200">{box.currentLocation.altitudeMeters} m ASL</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400">
-              Location: <span className="text-slate-200 font-medium">{box.currentLocation.locationName}</span>
-            </p>
-          </div>
-
-        </div>
-
+        )}
       </div>
 
-      {/* Temperature & Ambient History Chart */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+      {/* Route & Waypoint Log */}
+      <div className="panel p-4 sm:p-5 rounded-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-cyan-400" />
-            <h2 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
-              Chamber Temperature vs Ambient Air Profile
+            <MapPin className="w-4 h-4 text-teal-400" />
+            <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+              Logistics Route & Checkpoints
             </h2>
           </div>
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="flex items-center gap-1.5 text-cyan-400">
-              <span className="w-3 h-0.5 bg-cyan-400 rounded"></span> Chamber Temp (°C)
-            </span>
-            <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-3 h-0.5 bg-amber-400 rounded"></span> Ambient Heat (°C)
-            </span>
-            <span className="text-emerald-400 hidden sm:inline-block">
-              [Safe Range: 2.0°C – 8.0°C]
-            </span>
+          <span className="text-[11px] font-mono text-teal-400">
+            {box.destination.distanceRemainingKm > 0 ? `${box.destination.distanceRemainingKm} km remaining` : 'Delivered'}
+          </span>
+        </div>
+
+        {/* Carrier Call Bar */}
+        <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+          <div>
+            <span className="font-semibold text-slate-200 block">{box.carrier.agency}</span>
+            <span className="text-[11px] text-slate-400">{box.carrier.driverName} ({box.carrier.vehicleNo})</span>
+          </div>
+          <a
+            href={`tel:${box.carrier.phone}`}
+            className="py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-teal-300 border border-slate-700 text-xs font-mono flex items-center gap-1.5"
+          >
+            <Phone className="w-3 h-3" />
+            <span>Call Driver</span>
+          </a>
+        </div>
+
+        {/* Vertical Stepper */}
+        <div className="relative pl-6 space-y-5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
+          {box.checkpoints.map((cp) => {
+            const isCompleted = cp.status === 'COMPLETED';
+            const isCurrent = cp.status === 'CURRENT';
+
+            return (
+              <div key={cp.id} className="relative">
+                <div className={`absolute -left-6 top-1 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  isCompleted 
+                    ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                    : isCurrent
+                      ? 'bg-teal-500 border-teal-300 text-slate-950'
+                      : 'bg-slate-900 border-slate-700'
+                }`}>
+                  {isCompleted && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                </div>
+
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span className={`text-xs font-semibold ${isCompleted || isCurrent ? 'text-slate-100' : 'text-slate-500'}`}>
+                      {cp.name}
+                    </span>
+                    {cp.timestamp && (
+                      <span className="text-[10px] font-mono text-teal-400">{cp.timestamp}</span>
+                    )}
+                  </div>
+                  {cp.notes && (
+                    <p className="text-[11px] text-slate-400 italic leading-snug">
+                      "{cp.notes}"
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Temperature Profile SVG Chart */}
+      <div className="panel p-4 sm:p-5 rounded-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-800 pb-2">
+          <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+            Chamber Temperature Profile
+          </h2>
+          <div className="flex items-center gap-3 text-[11px] font-mono">
+            <span className="text-teal-400">■ Core Temp</span>
+            <span className="text-amber-400">■ Ambient</span>
+            <span className="text-emerald-500 text-[10px]">Safe: 2–8°C</span>
           </div>
         </div>
 
-        {/* SVG Multi-Line Chart */}
+        {/* Chart View */}
         <div className="w-full overflow-x-auto">
-          <div className="min-w-[600px] h-48 relative flex flex-col justify-between pt-4">
+          <div className="min-w-[320px] h-36 relative flex flex-col justify-between pt-2">
             
-            {/* Safe Zone Ribbon (2°C - 8°C) */}
-            <div className="absolute inset-x-0 top-16 bottom-12 bg-emerald-500/5 border-y border-emerald-500/20 pointer-events-none flex items-center justify-end pr-4">
-              <span className="text-[10px] font-mono text-emerald-400/60 uppercase">
-                Safe 2°C – 8°C Cold Chain Zone
-              </span>
-            </div>
+            {/* Safe 2-8°C Zone */}
+            <div className="absolute inset-x-0 top-12 bottom-6 bg-emerald-500/5 border-y border-emerald-500/15 pointer-events-none" />
 
-            {/* SVG Data Lines */}
-            <svg className="w-full h-full overflow-visible" viewBox="0 0 600 160" preserveAspectRatio="none">
-              
-              {/* Grid lines */}
-              <line x1="0" y1="40" x2="600" y2="40" stroke="#1e293b" strokeDasharray="4 4" />
-              <line x1="0" y1="80" x2="600" y2="80" stroke="#1e293b" strokeDasharray="4 4" />
-              <line x1="0" y1="120" x2="600" y2="120" stroke="#1e293b" strokeDasharray="4 4" />
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 400 120" preserveAspectRatio="none">
+              <line x1="0" y1="30" x2="400" y2="30" stroke="#1e293b" strokeDasharray="3 3" />
+              <line x1="0" y1="60" x2="400" y2="60" stroke="#1e293b" strokeDasharray="3 3" />
+              <line x1="0" y1="90" x2="400" y2="90" stroke="#1e293b" strokeDasharray="3 3" />
 
-              {/* Ambient Temp Line (Amber) */}
+              {/* Ambient Line */}
               <polyline
                 fill="none"
                 stroke="#f59e0b"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity="0.85"
+                opacity="0.8"
                 points={box.telemetryHistory.map((pt, i) => {
-                  const x = (i / (box.telemetryHistory.length - 1 || 1)) * 560 + 20;
-                  // Map ambient 15-45 to Y: 140 to 20
-                  const y = 140 - ((pt.ambientTemp - 15) / 30) * 120;
+                  const x = (i / (box.telemetryHistory.length - 1 || 1)) * 380 + 10;
+                  const y = 100 - ((pt.ambientTemp - 15) / 30) * 80;
                   return `${x},${y}`;
                 }).join(' ')}
               />
 
-              {/* Internal Chamber Temp Line (Cyan) */}
+              {/* Internal Chamber Temp Line */}
               <polyline
                 fill="none"
-                stroke="#06b6d4"
-                strokeWidth="3"
+                stroke="#14b8a6"
+                strokeWidth="2.5"
                 strokeLinecap="round"
-                strokeLinejoin="round"
                 points={box.telemetryHistory.map((pt, i) => {
-                  const x = (i / (box.telemetryHistory.length - 1 || 1)) * 560 + 20;
-                  // Map internal 0-10 to Y: 130 to 50
-                  const y = 130 - (pt.internalTemp / 10) * 70;
+                  const x = (i / (box.telemetryHistory.length - 1 || 1)) * 380 + 10;
+                  const y = 95 - (pt.internalTemp / 10) * 50;
                   return `${x},${y}`;
                 }).join(' ')}
               />
 
-              {/* Points on internal line */}
+              {/* Points */}
               {box.telemetryHistory.map((pt, i) => {
-                const x = (i / (box.telemetryHistory.length - 1 || 1)) * 560 + 20;
-                const y = 130 - (pt.internalTemp / 10) * 70;
+                const x = (i / (box.telemetryHistory.length - 1 || 1)) * 380 + 10;
+                const y = 95 - (pt.internalTemp / 10) * 50;
                 return (
-                  <g key={i}>
-                    <circle cx={x} cy={y} r="4" fill="#06b6d4" stroke="#0f172a" strokeWidth="2" />
-                    <text x={x} y={y - 8} fill="#06b6d4" fontSize="10" fontFamily="IBM Plex Mono" textAnchor="middle">
-                      {pt.internalTemp}°C
-                    </text>
-                  </g>
+                  <circle key={i} cx={x} cy={y} r="3" fill="#14b8a6" />
                 );
               })}
-
             </svg>
 
-            {/* X-Axis Timestamps */}
-            <div className="flex justify-between text-[11px] font-mono text-slate-500 pt-2 border-t border-slate-800">
+            <div className="flex justify-between text-[10px] font-mono text-slate-500 pt-1 border-t border-slate-800">
               {box.telemetryHistory.map((pt, i) => (
                 <span key={i}>{pt.time}</span>
               ))}
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* Cargo Manifest & Medical Inventory */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      {/* Cargo Manifest (Mobile Cards + Clean Desktop Table) */}
+      <div className="panel p-4 sm:p-5 rounded-xl space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-cyan-400" />
-            <h2 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
-              Cold-Chain Cargo Manifest & Batch Compliance
+            <FileText className="w-4 h-4 text-teal-400" />
+            <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+              Cargo Manifest & Batch Numbers
             </h2>
           </div>
-          <span className="text-xs font-mono text-emerald-400">
-            WHO PQS E003 Standards Compliant
-          </span>
+          <span className="text-[10px] font-mono text-emerald-400">WHO PQS E003</span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile View: Clean stacked cards */}
+        <div className="space-y-2.5 sm:hidden">
+          {box.manifest.map((item) => (
+            <div key={item.id} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1 text-xs">
+              <div className="font-semibold text-slate-100">{item.name}</div>
+              <div className="flex justify-between text-slate-400 font-mono text-[11px]">
+                <span>Batch: <b className="text-slate-300">{item.batchNumber}</b></span>
+                <span className="text-emerald-400 font-bold">{item.quantity} {item.unit}</span>
+              </div>
+              <div className="flex justify-between text-slate-500 text-[10px] font-mono pt-1 border-t border-slate-900">
+                <span>{item.tempRequirement}</span>
+                <span>Exp: {item.expiryDate}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View: Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
-                <th className="py-2.5 px-3">CARGO ITEM</th>
-                <th className="py-2.5 px-3">CATEGORY</th>
-                <th className="py-2.5 px-3">BATCH #</th>
-                <th className="py-2.5 px-3">QUANTITY</th>
-                <th className="py-2.5 px-3">TEMP LIMIT</th>
-                <th className="py-2.5 px-3">EXPIRY DATE</th>
-                <th className="py-2.5 px-3">MANUFACTURER</th>
+              <tr className="border-b border-slate-800 text-slate-400 font-mono text-[10px]">
+                <th className="py-2 px-2">CARGO ITEM</th>
+                <th className="py-2 px-2">BATCH #</th>
+                <th className="py-2 px-2">QTY</th>
+                <th className="py-2 px-2">STORAGE TEMP</th>
+                <th className="py-2 px-2">EXPIRY</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono">
+            <tbody className="divide-y divide-slate-800 font-mono text-xs">
               {box.manifest.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-900/60 transition">
-                  <td className="py-3 px-3 font-semibold text-slate-100 font-sans">
-                    {item.name}
-                  </td>
-                  <td className="py-3 px-3 text-cyan-300">
-                    {item.category}
-                  </td>
-                  <td className="py-3 px-3 text-slate-300">
-                    {item.batchNumber}
-                  </td>
-                  <td className="py-3 px-3 text-emerald-400 font-bold">
-                    {item.quantity} {item.unit}
-                  </td>
-                  <td className="py-3 px-3 text-slate-300">
-                    {item.tempRequirement}
-                  </td>
-                  <td className="py-3 px-3 text-slate-400">
-                    {item.expiryDate}
-                  </td>
-                  <td className="py-3 px-3 text-slate-400 font-sans">
-                    {item.manufacturer}
-                  </td>
+                <tr key={item.id}>
+                  <td className="py-2.5 px-2 font-sans font-medium text-slate-200">{item.name}</td>
+                  <td className="py-2.5 px-2 text-slate-400">{item.batchNumber}</td>
+                  <td className="py-2.5 px-2 text-emerald-400 font-bold">{item.quantity} {item.unit}</td>
+                  <td className="py-2.5 px-2 text-slate-300">{item.tempRequirement}</td>
+                  <td className="py-2.5 px-2 text-slate-500">{item.expiryDate}</td>
                 </tr>
               ))}
             </tbody>
@@ -806,53 +578,27 @@ export const BoxDetailView: React.FC<BoxDetailViewProps> = ({
         </div>
       </div>
 
-      {/* Immutable Chain-of-Custody & Audit Trail */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
-              Chain-of-Custody & Audit Log
-            </h2>
-          </div>
-          <span className="text-xs font-mono text-slate-400">
-            Digital Seal: <b className="text-cyan-400">{box.digitalSealHash}</b>
+      {/* Custody Audit Trail */}
+      <div className="panel p-4 sm:p-5 rounded-xl space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+            Audit Trail
+          </h2>
+          <span className="text-[10px] font-mono text-slate-500">
+            Seal: {box.digitalSealHash.slice(0, 10)}
           </span>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {box.auditLogs.map((log) => (
-            <div 
-              key={log.id} 
-              className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                    log.type === 'SCAN' 
-                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                      : log.type === 'ALERT'
-                        ? 'bg-red-950 text-red-300 border border-red-800'
-                        : log.type === 'HANDOVER'
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                          : 'bg-slate-800 text-slate-300'
-                  }`}>
-                    {log.type}
-                  </span>
-                  <span className="font-bold text-slate-100">{log.title}</span>
-                </div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
-                  {log.description}
-                </p>
-                <div className="text-[10px] font-mono text-slate-500 flex items-center gap-3">
-                  <span>Operator: {log.operator}</span>
-                  <span>•</span>
-                  <span>Location: {log.location}</span>
-                </div>
+            <div key={log.id} className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-200">{log.title}</span>
+                <span className="text-[10px] font-mono text-teal-400">{log.timestamp}</span>
               </div>
-
-              <div className="text-right text-[11px] font-mono text-cyan-400 shrink-0">
-                {log.timestamp}
+              <p className="text-[11px] text-slate-400 leading-snug">{log.description}</p>
+              <div className="text-[10px] font-mono text-slate-500">
+                {log.operator} • {log.location}
               </div>
             </div>
           ))}

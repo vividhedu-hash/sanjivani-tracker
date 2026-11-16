@@ -10,7 +10,7 @@ import { NewBoxModal } from './components/NewBoxModal';
 
 export const App: React.FC = () => {
   const [boxes, setBoxes] = useState<ColdChainBox[]>(() => {
-    const saved = localStorage.getItem('sanjivani_boxes_v1');
+    const saved = localStorage.getItem('sanjivani_boxes_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -26,12 +26,11 @@ export const App: React.FC = () => {
   const [isNewBoxModalOpen, setIsNewBoxModalOpen] = useState(false);
   const [qrLabelBox, setQrLabelBox] = useState<ColdChainBox | null>(null);
 
-  // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('sanjivani_boxes_v1', JSON.stringify(boxes));
+    localStorage.setItem('sanjivani_boxes_v2', JSON.stringify(boxes));
   }, [boxes]);
 
-  // Handle URL Hash & Search Query Routing: e.g. #/box/SNJ-BX-9042 or ?box=SNJ-BX-9042
+  // Handle URL hash routing (#/box/SNJ-BX-9042)
   useEffect(() => {
     const handleUrlRoute = () => {
       const hash = window.location.hash;
@@ -51,7 +50,6 @@ export const App: React.FC = () => {
         if (found) {
           setSelectedBoxId(found.id);
         } else {
-          // If custom ID, generate and add
           const generated = generateBoxById(targetId);
           setBoxes(prev => [generated, ...prev.filter(b => b.id !== generated.id)]);
           setSelectedBoxId(generated.id);
@@ -66,7 +64,6 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleUrlRoute);
   }, []);
 
-  // Update URL hash when selectedBoxId changes
   const handleSelectBox = (box: ColdChainBox) => {
     setSelectedBoxId(box.id);
     window.location.hash = `#/box/${box.id}`;
@@ -79,7 +76,6 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Called when a QR code is scanned via camera, sample click, upload or manual
   const handleBoxScanned = (scannedId: string) => {
     const cleanId = scannedId.trim().toUpperCase();
     const existing = boxes.find(b => b.id.toUpperCase() === cleanId);
@@ -102,22 +98,19 @@ export const App: React.FC = () => {
     handleSelectBox(newBox);
   };
 
-  // Real-time subtle telemetry fluctuation tick (gives breathing life to the dashboard)
+  // Subtle telemetry tick
   useEffect(() => {
     const interval = setInterval(() => {
       setBoxes(prev => prev.map(b => {
         if (b.status === 'DELIVERED') return b;
-        
-        // Small fluctuation (+/- 0.05°C)
-        const delta = (Math.random() - 0.5) * 0.08;
+        const delta = (Math.random() - 0.5) * 0.06;
         const newTemp = Number((b.internalTemp + delta).toFixed(1));
-        
         return {
           ...b,
-          internalTemp: Math.max(1.8, Math.min(8.5, newTemp))
+          internalTemp: Math.max(2.1, Math.min(7.9, newTemp))
         };
       }));
-    }, 7000);
+    }, 8000);
 
     return () => clearInterval(interval);
   }, []);
@@ -125,9 +118,9 @@ export const App: React.FC = () => {
   const activeSelectedBox = boxes.find(b => b.id === selectedBoxId) || null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-teal-500 selection:text-slate-950">
       
-      {/* Top Global Navigation Bar */}
+      {/* Top Navbar */}
       <Navbar
         boxes={boxes}
         selectedBox={activeSelectedBox}
@@ -138,7 +131,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6">
         {activeSelectedBox ? (
           <BoxDetailView
             box={activeSelectedBox}
@@ -177,17 +170,11 @@ export const App: React.FC = () => {
         onAddBox={handleAddBox}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-8 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-heading font-bold text-slate-300">SANJIVANI (संजीवनी)</span>
-            <span>•</span>
-            <span>Hybrid PCM–Peltier Medical Cold-Chain System</span>
-          </div>
-          <div className="font-mono text-[11px] text-slate-400">
-            Senior Bal Vigyan 2026-2027 • Products & Telemetry Tracking Dashboard
-          </div>
+      {/* Clean Utility Footer */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-5 px-4 text-center text-[11px] text-slate-500 font-mono">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>SANJIVANI • Sensor-Triggered PCM–Peltier Medical Cold-Chain</span>
+          <span>Senior Bal Vigyan 2026–2027</span>
         </div>
       </footer>
 
